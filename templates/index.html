@@ -1,9 +1,254 @@
+
 <!doctype html>
-<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>My English Words</title><link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}"></head>
-<body><main><h1>My English Words</h1>
-<div class="stats">{% for n,label in statuses.items() %}<a class="stat s{{n}}" href="{{url_for('index',status=n)}}">{{label}}<strong>{{counts.get(n,0)}}</strong></a>{% endfor %}</div>
-<section><h2>単語を登録</h2><form action="{{url_for('add')}}" method="post" class="stack"><input name="word" placeholder="英単語" required><input name="meaning" placeholder="日本語訳" required><textarea name="example" placeholder="例文（任意）" rows="2"></textarea><button>登録</button></form></section>
-<section><h2>単語一覧</h2><form method="get" class="search"><input name="q" value="{{q}}" placeholder="英単語・日本語で検索"><select name="status"><option value="all">すべて</option>{% for n,label in statuses.items() %}<option value="{{n}}" {% if selected == n|string %}selected{% endif %}>{{label}}</option>{% endfor %}</select><button>検索</button><a href="{{url_for('index')}}">解除</a></form><p class="muted">{{words|length}} 件 / 全 {{counts.values()|sum}} 件</p>
-{% macro context_fields() %}<input type="hidden" name="q" value="{{q}}"><input type="hidden" name="filter" value="{{selected}}">{% endmacro %}
-{% for w in words %}<article><div class="wordrow"><div><strong class="word">{{w.word}}</strong><div>{{w.meaning}}</div></div><form method="post" action="{{url_for('change_status',word_id=w.id)}}">{{context_fields()}}<select aria-label="習得状況" class="s{{w.status}}" name="status" onchange="this.form.submit()">{% for n,label in statuses.items() %}<option value="{{n}}" {% if w.status == n %}selected{% endif %}>{{label}}</option>{% endfor %}</select><noscript><button>更新</button></noscript></form></div>
-{% if w.example %}<p class="example">{{w.example}}</p>{% endif %}<details><summary>編集・削除</summary><form class="stack" method="post" action="{{url_for('edit',word_id=w.id)}}">{{context_fields()}}<input name="word" value="{{w.word}}" required><input name="meaning" value="{{w.meaning}}" required><textarea name="example">{{w.example}}</textarea><button>保存</button></form><form method="post" action="{{url_for('delete',word_id=w.id)}}" onsubmit="return confirm('この単語を削除しますか？')">{{context_fields()}}<button class="delete">削除</button></form></details></article>{% else %}<p>該当する単語がありません。</p>{% endfor %}</section></main></body></html>
+<html lang="ja">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1">
+    <title>My English Words</title>
+    <link rel="stylesheet"
+          href="{{ url_for('static', filename='style.css') }}">
+</head>
+
+<body>
+<main>
+    <h1>My English Words</h1>
+
+    {% macro context_fields() %}
+        <input type="hidden" name="q" value="{{q}}">
+        <input type="hidden" name="filter"
+               value="{{selected}}">
+        <input type="hidden" name="list_filter"
+               value="{{selected_list}}">
+    {% endmacro %}
+
+    <div class="stats">
+        {% for n,label in statuses.items() %}
+        <a class="stat s{{n}}"
+           href="{{url_for('index', status=n, q=q, list_id=selected_list)}}">
+            {{label}}
+            <strong>{{counts.get(n,0)}}</strong>
+        </a>
+        {% endfor %}
+    </div>
+
+    <!-- リスト管理 -->
+    <section>
+        <details>
+            <summary>リスト管理（{{lists|length}}）</summary>
+
+            <form method="post"
+                  action="{{url_for('add_list')}}"
+                  class="search">
+                {{context_fields()}}
+                <input name="name"
+                       placeholder="新しいリスト名"
+                       required>
+                <button>追加</button>
+            </form>
+
+            {% for l in lists %}
+            <div class="wordrow">
+                <a href="{{url_for('index', list_id=l.id)}}">
+                    {{l.name}}
+                </a>
+
+                <form method="post"
+                      action="{{url_for('delete_list', list_id=l.id)}}"
+                      onsubmit="return confirm('リストを削除しますか？単語は削除されません。')">
+                    <button class="delete">削除</button>
+                </form>
+            </div>
+            {% else %}
+            <p class="muted">リストがありません。</p>
+            {% endfor %}
+        </details>
+    </section>
+
+    <!-- 単語登録 -->
+    <section>
+        <h2>単語を登録</h2>
+
+        <form action="{{url_for('add')}}"
+              method="post" class="stack">
+
+            {{context_fields()}}
+
+            <input name="word"
+                   placeholder="英単語" required>
+
+            <input name="meaning"
+                   placeholder="日本語訳" required>
+
+            <textarea name="example"
+                      placeholder="例文（任意）"
+                      rows="2"></textarea>
+
+            {% if lists %}
+            <div class="list-options">
+                <p class="muted">所属リスト（任意）</p>
+
+                {% for l in lists %}
+                <label>
+                    <input type="checkbox"
+                           name="list_ids"
+                           value="{{l.id}}"
+                           {% if selected_list == l.id|string %}
+                           checked
+                           {% endif %}>
+                    {{l.name}}
+                </label>
+                {% endfor %}
+            </div>
+            {% endif %}
+
+            <button>登録</button>
+        </form>
+    </section>
+
+    <!-- 単語一覧 -->
+    <section>
+        <h2>単語一覧</h2>
+
+        <form method="get" class="search">
+
+            <input name="q" value="{{q}}"
+                   placeholder="英単語・日本語で検索">
+
+            <select name="list_id">
+                <option value="all">全リスト</option>
+
+                {% for l in lists %}
+                <option value="{{l.id}}"
+                    {% if selected_list == l.id|string %}
+                    selected
+                    {% endif %}>
+                    {{l.name}}
+                </option>
+                {% endfor %}
+            </select>
+
+            <select name="status">
+                <option value="all">すべて</option>
+
+                {% for n,label in statuses.items() %}
+                <option value="{{n}}"
+                    {% if selected == n|string %}
+                    selected
+                    {% endif %}>
+                    {{label}}
+                </option>
+                {% endfor %}
+            </select>
+
+            <button>検索</button>
+            <a href="{{url_for('index')}}">解除</a>
+        </form>
+
+        <p class="muted">
+            {{words|length}} 件 /
+            全 {{counts.values()|sum}} 件
+        </p>
+
+        {% for w in words %}
+        <article>
+            <div class="wordrow">
+                <div>
+                    <strong class="word">{{w.word}}</strong>
+                    <div>{{w.meaning}}</div>
+                </div>
+
+                <form method="post"
+                      action="{{url_for('change_status', word_id=w.id)}}">
+
+                    {{context_fields()}}
+
+                    <select aria-label="習得状況"
+                            class="s{{w.status}}"
+                            name="status"
+                            onchange="this.form.submit()">
+
+                        {% for n,label in statuses.items() %}
+                        <option value="{{n}}"
+                            {% if w.status == n %}
+                            selected
+                            {% endif %}>
+                            {{label}}
+                        </option>
+                        {% endfor %}
+                    </select>
+
+                    <noscript><button>更新</button></noscript>
+                </form>
+            </div>
+
+            <!-- 所属リスト表示 -->
+            <div class="list-tags">
+                {% for l in lists %}
+                    {% if l.id in memberships.get(w.id, []) %}
+                    <a class="list-tag"
+                       href="{{url_for('index', list_id=l.id)}}">
+                        {{l.name}}
+                    </a>
+                    {% endif %}
+                {% endfor %}
+            </div>
+
+            {% if w.example %}
+            <p class="example">{{w.example}}</p>
+            {% endif %}
+
+            <details>
+                <summary>編集・削除</summary>
+
+                <form class="stack" method="post"
+                      action="{{url_for('edit', word_id=w.id)}}">
+
+                    {{context_fields()}}
+
+                    <input name="word"
+                           value="{{w.word}}" required>
+
+                    <input name="meaning"
+                           value="{{w.meaning}}" required>
+
+                    <textarea name="example">{{w.example}}</textarea>
+
+                    {% if lists %}
+                    <div class="list-options">
+                        <p class="muted">所属リスト</p>
+
+                        {% for l in lists %}
+                        <label>
+                            <input type="checkbox"
+                                   name="list_ids"
+                                   value="{{l.id}}"
+                                   {% if l.id in memberships.get(w.id, []) %}
+                                   checked
+                                   {% endif %}>
+                            {{l.name}}
+                        </label>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+
+                    <button>保存</button>
+                </form>
+
+                <form method="post"
+                      action="{{url_for('delete', word_id=w.id)}}"
+                      onsubmit="return confirm('この単語を削除しますか？')">
+
+                    {{context_fields()}}
+                    <button class="delete">削除</button>
+                </form>
+            </details>
+        </article>
+
+        {% else %}
+        <p>該当する単語がありません。</p>
+        {% endfor %}
+    </section>
+</main>
+</body>
+</html>
