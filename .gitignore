@@ -1,0 +1,4 @@
+words.db
+words.db-*
+__pycache__/
+.venv/
