@@ -13,7 +13,6 @@
 <body>
 <main>
     <h1>My English Words</h1>
-
     {% macro context_fields() %}
         <input type="hidden" name="q" value="{{q}}">
         <input type="hidden" name="filter"
@@ -155,6 +154,12 @@
             <div class="wordrow">
                 <div>
                     <strong class="word">{{w.word}}</strong>
+                    <button type="button"
+                        class="speak"
+                        data-word="{{w.word}}"
+                        onclick="speak(this.dataset.word)">
+                        🔊
+                    </button>
                     <div>{{w.meaning}}</div>
                 </div>
 
@@ -250,5 +255,28 @@
         {% endfor %}
     </section>
 </main>
+<script>
+function speak(text) {
+    if (!('speechSynthesis' in window)) {
+        alert('音声読み上げに対応していません');
+        return;
+    }
+
+    speechSynthesis.cancel();
+
+    const utterance = new SpeechSynthesisUtterance(text);
+
+    utterance.lang = 'en-US';
+    utterance.rate = 0.8;
+    utterance.pitch = 1.0;
+    utterance.volume = 1.0;
+
+    utterance.onerror = function(event) {
+        alert('音声エラー: ' + event.error);
+    };
+
+    speechSynthesis.speak(utterance);
+}
+</script>
 </body>
 </html>
