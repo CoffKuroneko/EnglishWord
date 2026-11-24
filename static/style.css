@@ -193,3 +193,9 @@ summary {
     cursor: pointer;
     font-size: 18px;
 }
+
+.phonetic {
+    font-size: 0.9rem;
+    color: #888;
+    margin: 2px 0 4px;
+}

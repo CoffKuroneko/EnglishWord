@@ -64,6 +64,74 @@
         </details>
     </section>
 
+    <!-- CSV管理 -->
+    <section>
+        <details {% if csv_result %}open{% endif %}>
+            <summary>CSV管理</summary>
+
+            <h3>インポート</h3>
+
+            <form method="post"
+                  action="{{url_for('import_csv')}}"
+                  enctype="multipart/form-data"
+                  class="stack">
+
+                {{context_fields()}}
+
+                <input type="file"
+                       name="csv_file"
+                       accept=".csv,text/csv"
+                       required>
+
+                {% if lists %}
+                <div class="list-options">
+                    <p class="muted">登録先リスト（任意）</p>
+
+                    {% for l in lists %}
+                    <label>
+                        <input type="checkbox"
+                               name="list_ids"
+                               value="{{l.id}}"
+                               {% if selected_list == l.id|string %}
+                               checked
+                               {% endif %}>
+                        {{l.name}}
+                    </label>
+                    {% endfor %}
+                </div>
+                {% endif %}
+
+                <button>インポート</button>
+            </form>
+
+            {% if csv_result %}
+            <p class="csv-result" role="status">
+                {{csv_result}}
+            </p>
+            {% endif %}
+
+            <hr>
+
+            <h3>エクスポート</h3>
+
+            <div class="stack">
+                <a class="csv-download"
+                   href="{{url_for('export_csv')}}">
+                    全単語をCSV出力
+                </a>
+
+                {% if selected_list != 'all' %}
+                <a class="csv-download"
+                   href="{{url_for('export_csv',
+                                   list_id=selected_list)}}">
+                    選択中のリストをCSV出力
+                </a>
+                {% endif %}
+            </div>
+        </details>
+    </section>
+
+
     <!-- 単語登録 -->
     <section>
         <h2>単語を登録</h2>
@@ -75,13 +143,16 @@
 
             <input name="word"
                    placeholder="英単語" required>
+            
+            <input name="phonetic"
+                   placeholder="発音記号（任意）">
 
             <input name="meaning"
                    placeholder="日本語訳" required>
 
             <textarea name="example"
-                      placeholder="例文（任意）"
-                      rows="2"></textarea>
+                      placeholder="メモ（任意）"
+                      rows="5"></textarea>
 
             {% if lists %}
             <div class="list-options">
@@ -160,6 +231,9 @@
                         onclick="speak(this.dataset.word)">
                         🔊
                     </button>
+                    {% if w.phonetic %}
+                        <div class="phonetic">{{w.phonetic}}</div>
+                    {% endif %}
                     <div>{{w.meaning}}</div>
                 </div>
 
@@ -212,8 +286,10 @@
                     {{context_fields()}}
 
                     <input name="word"
-                           value="{{w.word}}" required>
-
+                            value="{{w.word}}" required>
+                    <input name="phonetic"
+                            value="{{w.phonetic}}"
+                            placeholder="発音記号（任意）">
                     <input name="meaning"
                            value="{{w.meaning}}" required>
 

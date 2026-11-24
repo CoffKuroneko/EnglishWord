@@ -1,7 +1,12 @@
 
-from flask import Flask, request, redirect, url_for, render_template, abort
+from flask import (
+    Flask, request, redirect, url_for,
+    render_template, abort, Response
+)
 import sqlite3
 from pathlib import Path
+import csv
+import io
 
 app = Flask(__name__)
 DB = Path(__file__).with_name('words.db')
@@ -22,9 +27,24 @@ def init_db():
             word TEXT NOT NULL,
             meaning TEXT NOT NULL,
             example TEXT NOT NULL DEFAULT '',
+            phonetic TEXT NOT NULL DEFAULT '',
             status INTEGER NOT NULL DEFAULT 0
                 CHECK(status IN (0,1,2))
         )''')
+
+        # 既存DBへの発音記号カラム追加
+        columns = {
+            row['name']
+            for row in conn.execute(
+                'PRAGMA table_info(words)'
+            )
+        }
+
+        if 'phonetic' not in columns:
+            conn.execute('''
+                ALTER TABLE words
+                ADD COLUMN phonetic TEXT NOT NULL DEFAULT ''
+            ''')
 
         conn.execute('''CREATE TABLE IF NOT EXISTS lists (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -42,12 +62,13 @@ def init_db():
         )''')
 
 
-def back():
+def back(**kwargs):
     return redirect(url_for(
         'index',
         q=request.form.get('q', ''),
         status=request.form.get('filter', 'all'),
-        list_id=request.form.get('list_filter', 'all')
+        list_id=request.form.get('list_filter', 'all'),
+        **kwargs
     ))
 
 
@@ -112,7 +133,8 @@ def index():
         selected=status,
         lists=lists,
         selected_list=list_id,
-        memberships=memberships
+        memberships=memberships,
+        csv_result=request.args.get('csv_result', '')
     )
 
 
@@ -120,11 +142,12 @@ def fields():
     word = request.form.get('word', '').strip()
     meaning = request.form.get('meaning', '').strip()
     example = request.form.get('example', '').strip()
+    phonetic = request.form.get('phonetic', '').strip()
 
     if not word or not meaning:
         abort(400, '単語と意味を入力してください。')
 
-    return word, meaning, example
+    return word, meaning, example, phonetic
 
 
 def save_word_lists(conn, word_id):
@@ -148,8 +171,10 @@ def save_word_lists(conn, word_id):
 def add():
     with connect() as conn:
         cursor = conn.execute(
-            '''INSERT INTO words(word, meaning, example)
-               VALUES (?, ?, ?)''',
+            '''INSERT INTO words(
+                   word, meaning, example, phonetic
+               )
+               VALUES (?, ?, ?, ?)''',
             fields()
         )
 
@@ -163,7 +188,7 @@ def edit(word_id):
     with connect() as conn:
         cursor = conn.execute(
             '''UPDATE words
-               SET word=?, meaning=?, example=?
+               SET word=?, meaning=?, example=?, phonetic=?
                WHERE id=?''',
             (*fields(), word_id)
         )
@@ -228,6 +253,194 @@ def delete_list(list_id):
         )
 
     return redirect(url_for('index'))
+
+
+# ========================================
+# CSVインポート
+# ========================================
+
+@app.post('/csv/import')
+def import_csv():
+    file = request.files.get('csv_file')
+
+    if not file or not file.filename:
+        return back(csv_result='CSVファイルを選択してください。')
+
+    if not file.filename.lower().endswith('.csv'):
+        return back(csv_result='CSVファイルを指定してください。')
+
+    # ファイルサイズ上限：5MB
+    limit = 5 * 1024 * 1024
+    raw = file.stream.read(limit + 1)
+
+    if len(raw) > limit:
+        return back(csv_result='ファイルサイズが5MBを超えています。')
+
+    try:
+        content = raw.decode('utf-8-sig')
+    except UnicodeDecodeError:
+        return back(csv_result='UTF-8形式のCSVを指定してください。')
+
+    reader = csv.DictReader(
+        io.StringIO(content, newline=''),
+        strict=True
+    )
+
+    added = 0
+    skipped = 0
+    invalid = 0
+
+    try:
+        headers = reader.fieldnames
+
+        if not headers:
+            return back(csv_result='CSVが空です。')
+
+        reader.fieldnames = [
+            name.strip().lower()
+            for name in headers
+        ]
+
+        if len(set(reader.fieldnames)) != len(reader.fieldnames):
+            return back(csv_result='CSVの列名が重複しています。')
+
+        if not {'word', 'meaning'}.issubset(reader.fieldnames):
+            return back(
+                csv_result='wordとmeaningの列が必要です。'
+            )
+
+        with connect() as conn:
+
+            # 同時書き込みによる重複登録を防止
+            conn.execute('BEGIN IMMEDIATE')
+
+            existing = {
+                row['word'].strip().casefold()
+                for row in conn.execute(
+                    'SELECT word FROM words'
+                )
+            }
+
+            for row in reader:
+
+                if None in row:
+                    invalid += 1
+                    continue
+
+                word = (row.get('word') or '').strip()
+                meaning = (row.get('meaning') or '').strip()
+                example = (row.get('example') or '').strip()
+                phonetic = (row.get('phonetic') or '').strip()
+
+                if not word or not meaning:
+                    invalid += 1
+                    continue
+
+                key = word.casefold()
+
+                if key in existing:
+                    skipped += 1
+                    continue
+
+                cursor = conn.execute('''
+                    INSERT INTO words(
+                        word,
+                        meaning,
+                        example,
+                        phonetic,
+                        status
+                    )
+                    VALUES (?, ?, ?, ?, 0)
+                ''', (
+                    word,
+                    meaning,
+                    example,
+                    phonetic
+                ))
+
+                save_word_lists(
+                    conn,
+                    cursor.lastrowid
+                )
+
+                existing.add(key)
+                added += 1
+
+    except csv.Error:
+        return back(
+            csv_result='CSVの形式が不正です。登録を中止しました。'
+        )
+
+    return back(
+        csv_result=(
+            f'新規登録：{added}件 / '
+            f'重複スキップ：{skipped}件 / '
+            f'入力不備：{invalid}件'
+        )
+    )
+
+
+# ========================================
+# CSVエクスポート
+# ========================================
+
+@app.get('/csv/export')
+def export_csv():
+    list_id = request.args.get('list_id', 'all')
+
+    sql = '''
+        SELECT word, phonetic, meaning, example
+        FROM words
+    '''
+
+    params = []
+
+    if list_id.isdigit():
+        sql += '''
+            WHERE id IN (
+                SELECT word_id
+                FROM word_lists
+                WHERE list_id=?
+            )
+        '''
+        params.append(int(list_id))
+
+    sql += ' ORDER BY word COLLATE NOCASE, id'
+
+    with connect() as conn:
+        rows = conn.execute(
+            sql, params
+        ).fetchall()
+
+    output = io.StringIO(newline='')
+    writer = csv.writer(output)
+
+    writer.writerow([
+        'word',
+        'phonetic',
+        'meaning',
+        'example'
+    ])
+
+    for row in rows:
+        writer.writerow([
+            row['word'],
+            row['phonetic'],
+            row['meaning'],
+            row['example']
+        ])
+
+    # Excelでの文字化け対策
+    content = output.getvalue().encode('utf-8-sig')
+
+    return Response(
+        content,
+        content_type='text/csv; charset=utf-8',
+        headers={
+            'Content-Disposition':
+                'attachment; filename="english_words.csv"'
+        }
+    )
 
 
 init_db()
