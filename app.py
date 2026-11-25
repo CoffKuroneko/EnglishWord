@@ -28,11 +28,11 @@ def init_db():
             meaning TEXT NOT NULL,
             example TEXT NOT NULL DEFAULT '',
             phonetic TEXT NOT NULL DEFAULT '',
+            sentence TEXT NOT NULL DEFAULT '',
             status INTEGER NOT NULL DEFAULT 0
                 CHECK(status IN (0,1,2))
         )''')
 
-        # 既存DBへの発音記号カラム追加
         columns = {
             row['name']
             for row in conn.execute(
@@ -40,10 +40,18 @@ def init_db():
             )
         }
 
+        # 既存DBへの発音記号カラム追加
         if 'phonetic' not in columns:
             conn.execute('''
                 ALTER TABLE words
                 ADD COLUMN phonetic TEXT NOT NULL DEFAULT ''
+            ''')
+
+        # 既存DBへの例文カラム追加
+        if 'sentence' not in columns:
+            conn.execute('''
+                ALTER TABLE words
+                ADD COLUMN sentence TEXT NOT NULL DEFAULT ''
             ''')
 
         conn.execute('''CREATE TABLE IF NOT EXISTS lists (
@@ -143,11 +151,12 @@ def fields():
     meaning = request.form.get('meaning', '').strip()
     example = request.form.get('example', '').strip()
     phonetic = request.form.get('phonetic', '').strip()
+    sentence = request.form.get('sentence', '').strip()
 
     if not word or not meaning:
         abort(400, '単語と意味を入力してください。')
 
-    return word, meaning, example, phonetic
+    return word, meaning, example, phonetic, sentence
 
 
 def save_word_lists(conn, word_id):
@@ -169,6 +178,7 @@ def save_word_lists(conn, word_id):
 
 def word_exists(conn, word, exclude_id=None):
     key = word.strip().casefold()
+
     return any(
         row['word'].strip().casefold() == key
         for row in conn.execute(
@@ -181,6 +191,7 @@ def word_exists(conn, word, exclude_id=None):
 @app.post('/add')
 def add():
     data = fields()
+
     with connect() as conn:
         conn.execute('BEGIN IMMEDIATE')
 
@@ -188,10 +199,13 @@ def add():
             return back(csv_result='すでに登録されています。')
 
         cursor = conn.execute(
-            """INSERT INTO words(word, meaning, example, phonetic)
-               VALUES (?, ?, ?, ?)""",
+            """INSERT INTO words(
+                   word, meaning, example, phonetic, sentence
+               )
+               VALUES (?, ?, ?, ?, ?)""",
             data
         )
+
         save_word_lists(conn, cursor.lastrowid)
 
     return back()
@@ -200,11 +214,13 @@ def add():
 @app.post('/edit/<int:word_id>')
 def edit(word_id):
     data = fields()
+
     with connect() as conn:
         conn.execute('BEGIN IMMEDIATE')
 
         if not conn.execute(
-            'SELECT id FROM words WHERE id=?', (word_id,)
+            'SELECT id FROM words WHERE id=?',
+            (word_id,)
         ).fetchone():
             abort(404)
 
@@ -213,10 +229,12 @@ def edit(word_id):
 
         conn.execute(
             """UPDATE words
-               SET word=?, meaning=?, example=?, phonetic=?
+               SET word=?, meaning=?, example=?,
+                   phonetic=?, sentence=?
                WHERE id=?""",
             (*data, word_id)
         )
+
         save_word_lists(conn, word_id)
 
     return back(_anchor=f'word-{word_id}')
@@ -225,28 +243,40 @@ def edit(word_id):
 @app.post('/status/<int:word_id>')
 def change_status(word_id):
     status = request.form.get('status', type=int)
+
     if status not in STATUS:
         abort(400)
+
     with connect() as conn:
         cursor = conn.execute(
-            'UPDATE words SET status=? WHERE id=?', (status, word_id)
+            'UPDATE words SET status=? WHERE id=?',
+            (status, word_id)
         )
+
         if cursor.rowcount == 0:
             abort(404)
+
         counts = dict(conn.execute(
             'SELECT status, COUNT(*) FROM words GROUP BY status'
         ).fetchall())
+
     if request.headers.get('X-Requested-With') == 'fetch':
         return jsonify(counts=counts)
+
     return back()
 
 
 @app.post('/delete/<int:word_id>')
 def delete(word_id):
     with connect() as conn:
-        cursor = conn.execute('DELETE FROM words WHERE id=?', (word_id,))
+        cursor = conn.execute(
+            'DELETE FROM words WHERE id=?',
+            (word_id,)
+        )
+
         if cursor.rowcount == 0:
             abort(404)
+
     return back()
 
 
@@ -353,6 +383,7 @@ def import_csv():
                 meaning = (row.get('meaning') or '').strip()
                 example = (row.get('example') or '').strip()
                 phonetic = (row.get('phonetic') or '').strip()
+                sentence = (row.get('sentence') or '').strip()
 
                 if not word or not meaning:
                     invalid += 1
@@ -370,14 +401,16 @@ def import_csv():
                         meaning,
                         example,
                         phonetic,
+                        sentence,
                         status
                     )
-                    VALUES (?, ?, ?, ?, 0)
+                    VALUES (?, ?, ?, ?, ?, 0)
                 ''', (
                     word,
                     meaning,
                     example,
-                    phonetic
+                    phonetic,
+                    sentence
                 ))
 
                 save_word_lists(
@@ -411,7 +444,7 @@ def export_csv():
     list_id = request.args.get('list_id', 'all')
 
     sql = '''
-        SELECT word, phonetic, meaning, example
+        SELECT word, phonetic, meaning, example, sentence
         FROM words
     '''
 
@@ -441,7 +474,8 @@ def export_csv():
         'word',
         'phonetic',
         'meaning',
-        'example'
+        'example',
+        'sentence'
     ])
 
     for row in rows:
@@ -449,7 +483,8 @@ def export_csv():
             row['word'],
             row['phonetic'],
             row['meaning'],
-            row['example']
+            row['example'],
+            row['sentence']
         ])
 
     # Excelでの文字化け対策

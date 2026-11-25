@@ -13,6 +13,7 @@
 <body>
 <main>
     <h1>My English Words</h1>
+
     {% macro context_fields() %}
         <input type="hidden" name="q" value="{{q}}">
         <input type="hidden" name="filter"
@@ -39,10 +40,13 @@
             <form method="post"
                   action="{{url_for('add_list')}}"
                   class="search">
+
                 {{context_fields()}}
+
                 <input name="name"
                        placeholder="新しいリスト名"
                        required>
+
                 <button>追加</button>
             </form>
 
@@ -55,9 +59,11 @@
                 <form method="post"
                       action="{{url_for('delete_list', list_id=l.id)}}"
                       onsubmit="return confirm('リストを削除しますか？単語は削除されません。')">
+
                     <button class="delete">削除</button>
                 </form>
             </div>
+
             {% else %}
             <p class="muted">リストがありません。</p>
             {% endfor %}
@@ -131,24 +137,31 @@
         </details>
     </section>
 
-
     <!-- 単語登録 -->
     <section>
         <h2>単語を登録</h2>
 
         <form action="{{url_for('add')}}"
-              method="post" class="stack" data-word-action>
+              method="post"
+              class="stack"
+              data-word-action>
 
             {{context_fields()}}
 
             <input name="word"
-                   placeholder="英単語" required>
-            
+                   placeholder="英単語"
+                   required>
+
             <input name="phonetic"
                    placeholder="発音記号（任意）">
 
             <input name="meaning"
-                   placeholder="日本語訳" required>
+                   placeholder="日本語訳"
+                   required>
+
+            <input name="sentence"
+                   placeholder="例文（任意）"
+                   lang="en">
 
             <textarea name="example"
                       placeholder="メモ（任意）"
@@ -182,7 +195,8 @@
 
         <form method="get" class="search">
 
-            <input name="q" value="{{q}}"
+            <input name="q"
+                   value="{{q}}"
                    placeholder="英単語・日本語で検索">
 
             <select name="list_id">
@@ -222,30 +236,37 @@
 
         {% for w in words %}
         <article id="word-{{w.id}}">
+
             <div class="wordrow">
                 <div>
                     <strong class="word">{{w.word}}</strong>
+
                     <button type="button"
-                        class="speak"
-                        data-word="{{w.word}}"
-                        onclick="speak(this.dataset.word)">
+                            class="speak"
+                            data-word="{{w.word}}"
+                            aria-label="単語を読み上げる"
+                            onclick="speak(this.dataset.word)">
                         🔊
                     </button>
+
                     {% if w.phonetic %}
-                        <div class="phonetic">{{w.phonetic}}</div>
+                    <div class="phonetic">{{w.phonetic}}</div>
                     {% endif %}
+
                     <div>{{w.meaning}}</div>
                 </div>
 
                 <form method="post"
-                      action="{{url_for('change_status', word_id=w.id)}}" data-word-action>
+                      action="{{url_for('change_status', word_id=w.id)}}"
+                      data-word-action>
 
                     {{context_fields()}}
 
                     <select aria-label="習得状況"
                             class="s{{w.status}}"
                             name="status"
-                            data-previous="{{w.status}}" onchange="updateStatus(this)">
+                            data-previous="{{w.status}}"
+                            onchange="updateStatus(this)">
 
                         {% for n,label in statuses.items() %}
                         <option value="{{n}}"
@@ -273,6 +294,22 @@
                 {% endfor %}
             </div>
 
+            <!-- 例文と音声再生 -->
+            {% if w.sentence %}
+            <p class="sentence">
+                <span lang="en">{{w.sentence}}</span>
+
+                <button type="button"
+                        class="speak"
+                        data-word="{{w.sentence}}"
+                        aria-label="例文を読み上げる"
+                        onclick="speak(this.dataset.word)">
+                    🔊
+                </button>
+            </p>
+            {% endif %}
+
+            <!-- メモ -->
             {% if w.example %}
             <p class="example">{{w.example}}</p>
             {% endif %}
@@ -280,20 +317,33 @@
             <details>
                 <summary>編集・削除</summary>
 
-                <form class="stack" method="post"
-                      action="{{url_for('edit', word_id=w.id)}}" data-word-action>
+                <form class="stack"
+                      method="post"
+                      action="{{url_for('edit', word_id=w.id)}}"
+                      data-word-action>
 
                     {{context_fields()}}
 
                     <input name="word"
-                            value="{{w.word}}" required>
-                    <input name="phonetic"
-                            value="{{w.phonetic}}"
-                            placeholder="発音記号（任意）">
-                    <input name="meaning"
-                           value="{{w.meaning}}" required>
+                           value="{{w.word}}"
+                           required>
 
-                    <textarea name="example" rows="5">{{w.example}}</textarea>
+                    <input name="phonetic"
+                           value="{{w.phonetic}}"
+                           placeholder="発音記号（任意）">
+
+                    <input name="meaning"
+                           value="{{w.meaning}}"
+                           required>
+
+                    <input name="sentence"
+                           value="{{w.sentence}}"
+                           placeholder="例文（任意）"
+                           lang="en">
+
+                    <textarea name="example"
+                              placeholder="メモ（任意）"
+                              rows="5">{{w.example}}</textarea>
 
                     {% if lists %}
                     <div class="list-options">
@@ -318,9 +368,11 @@
 
                 <form method="post"
                       action="{{url_for('delete', word_id=w.id)}}"
-                      data-word-action onsubmit="return confirm('この単語を削除しますか？')">
+                      data-word-action
+                      onsubmit="return confirm('この単語を削除しますか？')">
 
                     {{context_fields()}}
+
                     <button class="delete">削除</button>
                 </form>
             </details>
@@ -331,19 +383,28 @@
         {% endfor %}
     </section>
 </main>
+
 <script>
+
+// 重複登録アラート
 {% if csv_result == 'すでに登録されています。' %}
     alert({{ csv_result | tojson }});
+
     const duplicateUrl = new URL(window.location.href);
     duplicateUrl.searchParams.delete('csv_result');
+
     history.replaceState(history.state, '', duplicateUrl);
 {% endif %}
 
+
+// 音声読み上げ（単語・例文共通）
 function speak(text) {
     if (!('speechSynthesis' in window)) {
         alert('音声読み上げに対応していません');
         return;
     }
+
+    if (!text.trim()) return;
 
     speechSynthesis.cancel();
 
@@ -355,75 +416,139 @@ function speak(text) {
     utterance.volume = 1.0;
 
     utterance.onerror = function(event) {
+        if (event.error === 'interrupted' ||
+            event.error === 'canceled') {
+            return;
+        }
+
         alert('音声エラー: ' + event.error);
     };
 
     speechSynthesis.speak(utterance);
 }
 
+
 // 単語操作の直前に位置を保存する
-document.addEventListener('submit', function (event) {
-    if (event.defaultPrevented || !event.target.matches('form[data-word-action]')) return;
-    sessionStorage.setItem('scrollPosition', String(window.scrollY));
-});
-window.addEventListener('load', function () {
-    const position = sessionStorage.getItem('scrollPosition');
-    if (position !== null) {
-        sessionStorage.removeItem('scrollPosition');
-        if (!location.hash) window.scrollTo(0, Number(position));
+document.addEventListener('submit', function(event) {
+    if (event.defaultPrevented ||
+        !event.target.matches('form[data-word-action]')) {
+        return;
     }
-    const target = document.getElementById(location.hash.slice(1));
-    if (target) target.scrollIntoView({block: 'center'});
+
+    sessionStorage.setItem(
+        'scrollPosition',
+        String(window.scrollY)
+    );
 });
 
-// 習得状態だけ非同期更新（連続操作は通信完了まで待つ）
+
+// スクロール位置の復元
+window.addEventListener('load', function() {
+    const position = sessionStorage.getItem('scrollPosition');
+
+    if (position !== null) {
+        sessionStorage.removeItem('scrollPosition');
+
+        if (!location.hash) {
+            window.scrollTo(0, Number(position));
+        }
+    }
+
+    const target = document.getElementById(
+        location.hash.slice(1)
+    );
+
+    if (target) {
+        target.scrollIntoView({block: 'center'});
+    }
+});
+
+
+// 習得状態だけ非同期更新
 let statusBusy = false;
+
 async function updateStatus(select) {
+
     if (statusBusy) {
         select.value = select.dataset.previous;
         return;
     }
+
     const form = select.form;
     const data = new FormData(form);
     const status = select.value;
+
     statusBusy = true;
     select.disabled = true;
+
     try {
         const response = await fetch(form.action, {
-            method: 'POST', body: data,
-            headers: {'X-Requested-With': 'fetch'}
+            method: 'POST',
+            body: data,
+            headers: {
+                'X-Requested-With': 'fetch'
+            }
         });
-        if (!response.ok) throw new Error('HTTP ' + response.status);
+
+        if (!response.ok) {
+            throw new Error('HTTP ' + response.status);
+        }
+
         const result = await response.json();
+
         select.classList.remove('s0', 's1', 's2');
         select.classList.add('s' + status);
         select.dataset.previous = status;
+
         for (const n of [0, 1, 2]) {
-            document.querySelector(`[data-count="${n}"]`).textContent = result.counts[n] || 0;
+            document.querySelector(
+                `[data-count="${n}"]`
+            ).textContent = result.counts[n] || 0;
         }
+
         document.getElementById('total-count').textContent =
-            Object.values(result.counts).reduce((a, b) => a + b, 0);
+            Object.values(result.counts).reduce(
+                (a, b) => a + b, 0
+            );
+
         const filter = data.get('filter');
+
         if (filter !== 'all' && filter !== status) {
+
             const article = form.closest('article');
             const section = article.parentElement;
+
             article.remove();
-            const count = section.querySelectorAll('article').length;
-            document.getElementById('visible-count').textContent = count;
+
+            const count =
+                section.querySelectorAll('article').length;
+
+            document.getElementById(
+                'visible-count'
+            ).textContent = count;
+
             if (!count) {
                 const p = document.createElement('p');
                 p.textContent = '該当する単語がありません。';
                 section.append(p);
             }
         }
+
     } catch (error) {
+
         select.value = select.dataset.previous;
-        alert('更新結果を確認できません。再読み込みして確認してください。');
+
+        alert(
+            '更新結果を確認できません。再読み込みして確認してください。'
+        );
+
     } finally {
+
         select.disabled = false;
         statusBusy = false;
     }
 }
+
 </script>
 </body>
 </html>
