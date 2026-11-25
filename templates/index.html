@@ -192,7 +192,17 @@
     <!-- 単語一覧 -->
     <section>
         <h2>単語一覧</h2>
+        <div style="display: flex; gap: 8px; margin-bottom: 12px;">
+            <button type="button"
+                    onclick="setAllWords(true)">
+                詳細表示
+            </button>
 
+            <button type="button"
+                    onclick="setAllWords(false)">
+                簡易表示
+            </button>
+        </div>
         <form method="get" class="search">
 
             <input name="q"
@@ -394,8 +404,15 @@
 </main>
 
 <script>
-
+// 単語の詳細表示・簡易表示
+function setAllWords(open) {
+    document.querySelectorAll('.word-details')
+        .forEach(details => {
+            details.open = open;
+        });
+}
 // 重複登録アラート
+
 {% if csv_result == 'すでに登録されています。' %}
     alert({{ csv_result | tojson }});
 
