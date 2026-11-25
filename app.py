@@ -1,7 +1,7 @@
 
 from flask import (
     Flask, request, redirect, url_for,
-    render_template, abort, Response
+    render_template, abort, Response, jsonify
 )
 import sqlite3
 from pathlib import Path
@@ -167,17 +167,31 @@ def save_word_lists(conn, word_id):
         ''', (word_id, list_id))
 
 
+def word_exists(conn, word, exclude_id=None):
+    key = word.strip().casefold()
+    return any(
+        row['word'].strip().casefold() == key
+        for row in conn.execute(
+            'SELECT id, word FROM words'
+        )
+        if row['id'] != exclude_id
+    )
+
+
 @app.post('/add')
 def add():
+    data = fields()
     with connect() as conn:
-        cursor = conn.execute(
-            '''INSERT INTO words(
-                   word, meaning, example, phonetic
-               )
-               VALUES (?, ?, ?, ?)''',
-            fields()
-        )
+        conn.execute('BEGIN IMMEDIATE')
 
+        if word_exists(conn, data[0]):
+            return back(csv_result='すでに登録されています。')
+
+        cursor = conn.execute(
+            """INSERT INTO words(word, meaning, example, phonetic)
+               VALUES (?, ?, ?, ?)""",
+            data
+        )
         save_word_lists(conn, cursor.lastrowid)
 
     return back()
@@ -185,46 +199,54 @@ def add():
 
 @app.post('/edit/<int:word_id>')
 def edit(word_id):
+    data = fields()
     with connect() as conn:
-        cursor = conn.execute(
-            '''UPDATE words
-               SET word=?, meaning=?, example=?, phonetic=?
-               WHERE id=?''',
-            (*fields(), word_id)
-        )
+        conn.execute('BEGIN IMMEDIATE')
 
-        if cursor.rowcount == 0:
+        if not conn.execute(
+            'SELECT id FROM words WHERE id=?', (word_id,)
+        ).fetchone():
             abort(404)
 
+        if word_exists(conn, data[0], exclude_id=word_id):
+            return back(csv_result='すでに登録されています。')
+
+        conn.execute(
+            """UPDATE words
+               SET word=?, meaning=?, example=?, phonetic=?
+               WHERE id=?""",
+            (*data, word_id)
+        )
         save_word_lists(conn, word_id)
 
-    return back()
+    return back(_anchor=f'word-{word_id}')
 
 
 @app.post('/status/<int:word_id>')
 def change_status(word_id):
     status = request.form.get('status', type=int)
-
     if status not in STATUS:
         abort(400)
-
     with connect() as conn:
-        conn.execute(
-            'UPDATE words SET status=? WHERE id=?',
-            (status, word_id)
+        cursor = conn.execute(
+            'UPDATE words SET status=? WHERE id=?', (status, word_id)
         )
-
+        if cursor.rowcount == 0:
+            abort(404)
+        counts = dict(conn.execute(
+            'SELECT status, COUNT(*) FROM words GROUP BY status'
+        ).fetchall())
+    if request.headers.get('X-Requested-With') == 'fetch':
+        return jsonify(counts=counts)
     return back()
 
 
 @app.post('/delete/<int:word_id>')
 def delete(word_id):
     with connect() as conn:
-        conn.execute(
-            'DELETE FROM words WHERE id=?',
-            (word_id,)
-        )
-
+        cursor = conn.execute('DELETE FROM words WHERE id=?', (word_id,))
+        if cursor.rowcount == 0:
+            abort(404)
     return back()
 
 

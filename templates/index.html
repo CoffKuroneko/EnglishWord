@@ -26,7 +26,7 @@
         <a class="stat s{{n}}"
            href="{{url_for('index', status=n, q=q, list_id=selected_list)}}">
             {{label}}
-            <strong>{{counts.get(n,0)}}</strong>
+            <strong data-count="{{n}}">{{counts.get(n,0)}}</strong>
         </a>
         {% endfor %}
     </div>
@@ -137,7 +137,7 @@
         <h2>単語を登録</h2>
 
         <form action="{{url_for('add')}}"
-              method="post" class="stack">
+              method="post" class="stack" data-word-action>
 
             {{context_fields()}}
 
@@ -216,12 +216,12 @@
         </form>
 
         <p class="muted">
-            {{words|length}} 件 /
-            全 {{counts.values()|sum}} 件
+            <span id="visible-count">{{words|length}}</span> 件 /
+            全 <span id="total-count">{{counts.values()|sum}}</span> 件
         </p>
 
         {% for w in words %}
-        <article>
+        <article id="word-{{w.id}}">
             <div class="wordrow">
                 <div>
                     <strong class="word">{{w.word}}</strong>
@@ -238,14 +238,14 @@
                 </div>
 
                 <form method="post"
-                      action="{{url_for('change_status', word_id=w.id)}}">
+                      action="{{url_for('change_status', word_id=w.id)}}" data-word-action>
 
                     {{context_fields()}}
 
                     <select aria-label="習得状況"
                             class="s{{w.status}}"
                             name="status"
-                            onchange="this.form.submit()">
+                            data-previous="{{w.status}}" onchange="updateStatus(this)">
 
                         {% for n,label in statuses.items() %}
                         <option value="{{n}}"
@@ -281,7 +281,7 @@
                 <summary>編集・削除</summary>
 
                 <form class="stack" method="post"
-                      action="{{url_for('edit', word_id=w.id)}}">
+                      action="{{url_for('edit', word_id=w.id)}}" data-word-action>
 
                     {{context_fields()}}
 
@@ -293,7 +293,7 @@
                     <input name="meaning"
                            value="{{w.meaning}}" required>
 
-                    <textarea name="example">{{w.example}}</textarea>
+                    <textarea name="example" rows="5">{{w.example}}</textarea>
 
                     {% if lists %}
                     <div class="list-options">
@@ -318,7 +318,7 @@
 
                 <form method="post"
                       action="{{url_for('delete', word_id=w.id)}}"
-                      onsubmit="return confirm('この単語を削除しますか？')">
+                      data-word-action onsubmit="return confirm('この単語を削除しますか？')">
 
                     {{context_fields()}}
                     <button class="delete">削除</button>
@@ -352,6 +352,70 @@ function speak(text) {
     };
 
     speechSynthesis.speak(utterance);
+}
+
+// 単語操作の直前に位置を保存する
+document.addEventListener('submit', function (event) {
+    if (event.defaultPrevented || !event.target.matches('form[data-word-action]')) return;
+    sessionStorage.setItem('scrollPosition', String(window.scrollY));
+});
+window.addEventListener('load', function () {
+    const position = sessionStorage.getItem('scrollPosition');
+    if (position !== null) {
+        sessionStorage.removeItem('scrollPosition');
+        if (!location.hash) window.scrollTo(0, Number(position));
+    }
+    const target = document.getElementById(location.hash.slice(1));
+    if (target) target.scrollIntoView({block: 'center'});
+});
+
+// 習得状態だけ非同期更新（連続操作は通信完了まで待つ）
+let statusBusy = false;
+async function updateStatus(select) {
+    if (statusBusy) {
+        select.value = select.dataset.previous;
+        return;
+    }
+    const form = select.form;
+    const data = new FormData(form);
+    const status = select.value;
+    statusBusy = true;
+    select.disabled = true;
+    try {
+        const response = await fetch(form.action, {
+            method: 'POST', body: data,
+            headers: {'X-Requested-With': 'fetch'}
+        });
+        if (!response.ok) throw new Error('HTTP ' + response.status);
+        const result = await response.json();
+        select.classList.remove('s0', 's1', 's2');
+        select.classList.add('s' + status);
+        select.dataset.previous = status;
+        for (const n of [0, 1, 2]) {
+            document.querySelector(`[data-count="${n}"]`).textContent = result.counts[n] || 0;
+        }
+        document.getElementById('total-count').textContent =
+            Object.values(result.counts).reduce((a, b) => a + b, 0);
+        const filter = data.get('filter');
+        if (filter !== 'all' && filter !== status) {
+            const article = form.closest('article');
+            const section = article.parentElement;
+            article.remove();
+            const count = section.querySelectorAll('article').length;
+            document.getElementById('visible-count').textContent = count;
+            if (!count) {
+                const p = document.createElement('p');
+                p.textContent = '該当する単語がありません。';
+                section.append(p);
+            }
+        }
+    } catch (error) {
+        select.value = select.dataset.previous;
+        alert('更新結果を確認できません。再読み込みして確認してください。');
+    } finally {
+        select.disabled = false;
+        statusBusy = false;
+    }
 }
 </script>
 </body>
