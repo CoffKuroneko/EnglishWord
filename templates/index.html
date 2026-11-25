@@ -66,7 +66,7 @@
 
     <!-- CSV管理 -->
     <section>
-        <details {% if csv_result %}open{% endif %}>
+        <details {% if csv_result and csv_result != 'すでに登録されています。' %}open{% endif %}>
             <summary>CSV管理</summary>
 
             <h3>インポート</h3>
@@ -104,7 +104,7 @@
                 <button>インポート</button>
             </form>
 
-            {% if csv_result %}
+            {% if csv_result and csv_result != 'すでに登録されています。' %}
             <p class="csv-result" role="status">
                 {{csv_result}}
             </p>
@@ -332,6 +332,13 @@
     </section>
 </main>
 <script>
+{% if csv_result == 'すでに登録されています。' %}
+    alert({{ csv_result | tojson }});
+    const duplicateUrl = new URL(window.location.href);
+    duplicateUrl.searchParams.delete('csv_result');
+    history.replaceState(history.state, '', duplicateUrl);
+{% endif %}
+
 function speak(text) {
     if (!('speechSynthesis' in window)) {
         alert('音声読み上げに対応していません');
