@@ -235,12 +235,45 @@
         </p>
 
         {% for w in words %}
-        <article id="word-{{w.id}}">
+        <article id="word-{{w.id}}" class="word-card">
 
-            <div class="wordrow">
-                <div>
+            <!-- 習得状況：常時表示 -->
+            <form method="post"
+                class="word-status"
+                action="{{url_for('change_status', word_id=w.id)}}"
+                data-word-action>
+
+                {{context_fields()}}
+
+                <select aria-label="習得状況"
+                        class="s{{w.status}}"
+                        name="status"
+                        data-previous="{{w.status}}"
+                        onchange="updateStatus(this)">
+
+                    {% for n,label in statuses.items() %}
+                    <option value="{{n}}"
+                        {% if w.status == n %}
+                        selected
+                        {% endif %}>
+                        {{label}}
+                    </option>
+                    {% endfor %}
+                </select>
+
+                <noscript><button>更新</button></noscript>
+            </form>
+
+            <!-- 単語の折りたたみ -->
+            <details class="word-details">
+
+                <summary>
                     <strong class="word">{{w.word}}</strong>
+                </summary>
 
+                <div class="word-content">
+
+                    <!-- 単語の音声再生 -->
                     <button type="button"
                             class="speak"
                             data-word="{{w.word}}"
@@ -254,130 +287,106 @@
                     {% endif %}
 
                     <div>{{w.meaning}}</div>
-                </div>
 
-                <form method="post"
-                      action="{{url_for('change_status', word_id=w.id)}}"
-                      data-word-action>
-
-                    {{context_fields()}}
-
-                    <select aria-label="習得状況"
-                            class="s{{w.status}}"
-                            name="status"
-                            data-previous="{{w.status}}"
-                            onchange="updateStatus(this)">
-
-                        {% for n,label in statuses.items() %}
-                        <option value="{{n}}"
-                            {% if w.status == n %}
-                            selected
-                            {% endif %}>
-                            {{label}}
-                        </option>
-                        {% endfor %}
-                    </select>
-
-                    <noscript><button>更新</button></noscript>
-                </form>
-            </div>
-
-            <!-- 所属リスト表示 -->
-            <div class="list-tags">
-                {% for l in lists %}
-                    {% if l.id in memberships.get(w.id, []) %}
-                    <a class="list-tag"
-                       href="{{url_for('index', list_id=l.id)}}">
-                        {{l.name}}
-                    </a>
-                    {% endif %}
-                {% endfor %}
-            </div>
-
-            <!-- 例文と音声再生 -->
-            {% if w.sentence %}
-            <p class="sentence">
-                <span lang="en">{{w.sentence}}</span>
-
-                <button type="button"
-                        class="speak"
-                        data-word="{{w.sentence}}"
-                        aria-label="例文を読み上げる"
-                        onclick="speak(this.dataset.word)">
-                    🔊
-                </button>
-            </p>
-            {% endif %}
-
-            <!-- メモ -->
-            {% if w.example %}
-            <p class="example">{{w.example}}</p>
-            {% endif %}
-
-            <details>
-                <summary>編集・削除</summary>
-
-                <form class="stack"
-                      method="post"
-                      action="{{url_for('edit', word_id=w.id)}}"
-                      data-word-action>
-
-                    {{context_fields()}}
-
-                    <input name="word"
-                           value="{{w.word}}"
-                           required>
-
-                    <input name="phonetic"
-                           value="{{w.phonetic}}"
-                           placeholder="発音記号（任意）">
-
-                    <input name="meaning"
-                           value="{{w.meaning}}"
-                           required>
-
-                    <input name="sentence"
-                           value="{{w.sentence}}"
-                           placeholder="例文（任意）"
-                           lang="en">
-
-                    <textarea name="example"
-                              placeholder="メモ（任意）"
-                              rows="5">{{w.example}}</textarea>
-
-                    {% if lists %}
-                    <div class="list-options">
-                        <p class="muted">所属リスト</p>
-
+                    <!-- 所属リスト表示 -->
+                    <div class="list-tags">
                         {% for l in lists %}
-                        <label>
-                            <input type="checkbox"
-                                   name="list_ids"
-                                   value="{{l.id}}"
-                                   {% if l.id in memberships.get(w.id, []) %}
-                                   checked
-                                   {% endif %}>
-                            {{l.name}}
-                        </label>
+                            {% if l.id in memberships.get(w.id, []) %}
+                            <a class="list-tag"
+                            href="{{url_for('index', list_id=l.id)}}">
+                                {{l.name}}
+                            </a>
+                            {% endif %}
                         {% endfor %}
                     </div>
+
+                    <!-- 例文と音声再生 -->
+                    {% if w.sentence %}
+                    <p class="sentence">
+                        <span lang="en">{{w.sentence}}</span>
+
+                        <button type="button"
+                                class="speak"
+                                data-word="{{w.sentence}}"
+                                aria-label="例文を読み上げる"
+                                onclick="speak(this.dataset.word)">
+                            🔊
+                        </button>
+                    </p>
                     {% endif %}
 
-                    <button>保存</button>
-                </form>
+                    <!-- メモ -->
+                    {% if w.example %}
+                    <p class="example">{{w.example}}</p>
+                    {% endif %}
 
-                <form method="post"
-                      action="{{url_for('delete', word_id=w.id)}}"
-                      data-word-action
-                      onsubmit="return confirm('この単語を削除しますか？')">
+                    <!-- 編集・削除 -->
+                    <details>
+                        <summary>編集・削除</summary>
 
-                    {{context_fields()}}
+                        <form class="stack"
+                            method="post"
+                            action="{{url_for('edit', word_id=w.id)}}"
+                            data-word-action>
 
-                    <button class="delete">削除</button>
-                </form>
+                            {{context_fields()}}
+
+                            <input name="word"
+                                value="{{w.word}}"
+                                required>
+
+                            <input name="phonetic"
+                                value="{{w.phonetic}}"
+                                placeholder="発音記号（任意）">
+
+                            <input name="meaning"
+                                value="{{w.meaning}}"
+                                required>
+
+                            <input name="sentence"
+                                value="{{w.sentence}}"
+                                placeholder="例文（任意）"
+                                lang="en">
+
+                            <textarea name="example"
+                                    placeholder="メモ（任意）"
+                                    rows="5">{{w.example}}</textarea>
+
+                            {% if lists %}
+                            <div class="list-options">
+                                <p class="muted">所属リスト</p>
+
+                                {% for l in lists %}
+                                <label>
+                                    <input type="checkbox"
+                                        name="list_ids"
+                                        value="{{l.id}}"
+                                        {% if l.id in memberships.get(w.id, []) %}
+                                        checked
+                                        {% endif %}>
+                                    {{l.name}}
+                                </label>
+                                {% endfor %}
+                            </div>
+                            {% endif %}
+
+                            <button>保存</button>
+                        </form>
+
+                        <form method="post"
+                            action="{{url_for('delete', word_id=w.id)}}"
+                            data-word-action
+                            onsubmit="return confirm('この単語を削除しますか？')">
+
+                            {{context_fields()}}
+
+                            <button class="delete">削除</button>
+                        </form>
+                    </details>
+
+                </div>
             </details>
         </article>
-
         {% else %}
         <p>該当する単語がありません。</p>
         {% endfor %}
@@ -459,6 +468,12 @@ window.addEventListener('load', function() {
     );
 
     if (target) {
+        const details = target.querySelector('.word-details');
+
+        if (details) {
+            details.open = true;
+        }
+
         target.scrollIntoView({block: 'center'});
     }
 });

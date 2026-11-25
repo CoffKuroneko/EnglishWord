@@ -199,3 +199,48 @@ summary {
     color: #888;
     margin: 2px 0 4px;
 }
+
+/* 単語カード */
+.word-card {
+    position: relative;
+}
+
+/* 習得状況を右上に固定 */
+.word-status {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    margin: 0;
+    z-index: 1;
+}
+
+.word-status select {
+    width: 90px;
+    margin: 0;
+}
+
+/* 単語の折りたたみ */
+.word-details {
+    margin: 0;
+    padding: 0;
+    border: none;
+}
+
+.word-details > summary {
+    cursor: pointer;
+    padding: 8px 110px 8px 0;
+    min-height: 40px;
+    box-sizing: border-box;
+    font-size: 18px;
+    font-weight: bold;
+    overflow-wrap: anywhere;
+}
+
+/* 展開した詳細 */
+.word-content {
+    padding-top: 12px;
+}
+
+.word-details[open] > summary {
+    margin-bottom: 8px;
+}
