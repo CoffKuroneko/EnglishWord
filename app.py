@@ -91,7 +91,7 @@ def index():
     list_id = request.args.get('list_id', 'all')
 
     page = max(1, request.args.get('page', 1, type=int))
-    per_page = 30
+    per_page = 300
 
     where = '''
         FROM words
