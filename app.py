@@ -71,13 +71,17 @@ def init_db():
 
 
 def back(**kwargs):
+    page = request.form.get('page', 1, type=int)
+
     return redirect(url_for(
         'index',
         q=request.form.get('q', ''),
         status=request.form.get('filter', 'all'),
         list_id=request.form.get('list_filter', 'all'),
+        page=page,
         **kwargs
     ))
+
 
 
 @app.get('/')
@@ -86,20 +90,24 @@ def index():
     status = request.args.get('status', 'all')
     list_id = request.args.get('list_id', 'all')
 
-    sql = '''
-        SELECT * FROM words
+    page = max(1, request.args.get('page', 1, type=int))
+    per_page = 30
+
+    where = '''
+        FROM words
         WHERE (word LIKE ? OR meaning LIKE ?)
     '''
+
     params = [f'%{q}%', f'%{q}%']
 
     if status in ('0', '1', '2'):
-        sql += ' AND status = ?'
+        where += ' AND status = ?'
         params.append(int(status))
     else:
         status = 'all'
 
     if list_id.isdigit():
-        sql += ''' AND id IN (
+        where += ''' AND id IN (
             SELECT word_id FROM word_lists
             WHERE list_id = ?
         )'''
@@ -108,9 +116,25 @@ def index():
         list_id = 'all'
 
     with connect() as conn:
-        words = conn.execute(
-            sql + ' ORDER BY word COLLATE NOCASE, id',
+
+        filtered_total = conn.execute(
+            'SELECT COUNT(*) ' + where,
             params
+        ).fetchone()[0]
+
+        total_pages = max(
+            1,
+            (filtered_total + per_page - 1) // per_page
+        )
+
+        page = min(page, total_pages)
+        offset = (page - 1) * per_page
+
+        words = conn.execute(
+            'SELECT * ' + where +
+            ' ORDER BY word COLLATE NOCASE, id'
+            ' LIMIT ? OFFSET ?',
+            (*params, per_page, offset)
         ).fetchall()
 
         counts = dict(conn.execute(
@@ -121,16 +145,27 @@ def index():
             'SELECT * FROM lists ORDER BY name'
         ).fetchall()
 
-        relations = conn.execute(
-            'SELECT * FROM word_lists'
-        ).fetchall()
-
         memberships = {}
 
-        for row in relations:
-            memberships.setdefault(
-                row['word_id'], []
-            ).append(row['list_id'])
+        if words:
+            word_ids = [w['id'] for w in words]
+
+            placeholders = ','.join(
+                '?' for _ in word_ids
+            )
+
+            relations = conn.execute(
+                f'''
+                SELECT * FROM word_lists
+                WHERE word_id IN ({placeholders})
+                ''',
+                word_ids
+            ).fetchall()
+
+            for row in relations:
+                memberships.setdefault(
+                    row['word_id'], []
+                ).append(row['list_id'])
 
     return render_template(
         'index.html',
@@ -142,8 +177,13 @@ def index():
         lists=lists,
         selected_list=list_id,
         memberships=memberships,
-        csv_result=request.args.get('csv_result', '')
+        csv_result=request.args.get('csv_result', ''),
+        page=page,
+        per_page=per_page,
+        total_pages=total_pages,
+        filtered_total=filtered_total
     )
+
 
 
 def fields():

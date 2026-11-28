@@ -244,3 +244,47 @@ summary {
 .word-details[open] > summary {
     margin-bottom: 8px;
 }
+
+.pagination {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin: 24px 0 10px;
+}
+
+.pagination a,
+.pagination .current-page {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 36px;
+    height: 40px;
+    padding: 8px;
+    border-radius: 8px;
+    font-size: 14px;
+    text-decoration: none;
+}
+
+.pagination a {
+    background: #e8eee7;
+    color: #435744;
+}
+
+.pagination a:hover {
+    background: #d6e2d5;
+}
+
+.pagination .current-page {
+    background: #52765b;
+    color: white;
+    font-weight: bold;
+}
+
+.page-info {
+    text-align: center;
+    color: #899489;
+    font-size: 13px;
+    margin-bottom: 24px;
+}

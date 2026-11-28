@@ -16,10 +16,15 @@
 
     {% macro context_fields() %}
         <input type="hidden" name="q" value="{{q}}">
+
         <input type="hidden" name="filter"
-               value="{{selected}}">
+            value="{{selected}}">
+
         <input type="hidden" name="list_filter"
-               value="{{selected_list}}">
+            value="{{selected_list}}">
+
+        <input type="hidden" name="page"
+            value="{{page}}">
     {% endmacro %}
 
     <div class="stats">
@@ -240,7 +245,8 @@
         </form>
 
         <p class="muted">
-            <span id="visible-count">{{words|length}}</span> 件 /
+            <span id="visible-count">{{words|length}}</span> 件表示 /
+            該当 {{filtered_total}} 件 /
             全 <span id="total-count">{{counts.values()|sum}}</span> 件
         </p>
 
@@ -400,17 +406,105 @@
         {% else %}
         <p>該当する単語がありません。</p>
         {% endfor %}
+
+        {% if total_pages > 1 %}
+        <nav class="pagination">
+
+            {% if page > 1 %}
+            <a href="{{url_for('index',
+                q=q,
+                status=selected,
+                list_id=selected_list,
+                page=1)}}">
+                «
+            </a>
+
+            <a href="{{url_for('index',
+                q=q,
+                status=selected,
+                list_id=selected_list,
+                page=page-1)}}">
+                ‹
+            </a>
+            {% endif %}
+
+            {% for p in range(
+                [1, page-2]|max,
+                [total_pages+1, page+3]|min
+            ) %}
+
+                {% if p == page %}
+                <span class="current-page">{{p}}</span>
+                {% else %}
+                <a href="{{url_for('index',
+                    q=q,
+                    status=selected,
+                    list_id=selected_list,
+                    page=p)}}">
+                    {{p}}
+                </a>
+                {% endif %}
+
+            {% endfor %}
+
+            {% if page < total_pages %}
+            <a href="{{url_for('index',
+                q=q,
+                status=selected,
+                list_id=selected_list,
+                page=page+1)}}">
+                ›
+            </a>
+
+            <a href="{{url_for('index',
+                q=q,
+                status=selected,
+                list_id=selected_list,
+                page=total_pages)}}">
+                »
+            </a>
+            {% endif %}
+
+        </nav>
+
+        <div class="page-info">
+            {{page}} / {{total_pages}} ページ
+        </div>
+        {% endif %}
+
     </section>
 </main>
 
 <script>
 // 単語の詳細表示・簡易表示
+// 単語の詳細表示・簡易表示
 function setAllWords(open) {
+    localStorage.setItem(
+        'englishWordsDetailMode',
+        open ? 'open' : 'closed'
+    );
+
     document.querySelectorAll('.word-details')
         .forEach(details => {
             details.open = open;
         });
 }
+
+// 詳細表示・簡易表示の復元
+document.addEventListener('DOMContentLoaded', function() {
+
+    const mode = localStorage.getItem(
+        'englishWordsDetailMode'
+    );
+
+    if (mode === 'open') {
+        setAllWords(true);
+    } else {
+        setAllWords(false);
+    }
+
+});
+
 // 重複登録アラート
 
 {% if csv_result == 'すでに登録されています。' %}
@@ -496,6 +590,7 @@ window.addEventListener('load', function() {
 });
 
 
+
 // 習得状態だけ非同期更新
 let statusBusy = false;
 
@@ -547,23 +642,16 @@ async function updateStatus(select) {
 
         if (filter !== 'all' && filter !== status) {
 
-            const article = form.closest('article');
-            const section = article.parentElement;
+            sessionStorage.setItem(
+                'scrollPosition',
+                String(window.scrollY)
+            );
 
-            article.remove();
+            const url = new URL(window.location.href);
+            url.hash = '';
+            url.searchParams.delete('csv_result');
 
-            const count =
-                section.querySelectorAll('article').length;
-
-            document.getElementById(
-                'visible-count'
-            ).textContent = count;
-
-            if (!count) {
-                const p = document.createElement('p');
-                p.textContent = '該当する単語がありません。';
-                section.append(p);
-            }
+            window.location.replace(url.toString());
         }
 
     } catch (error) {
